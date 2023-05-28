@@ -22,5 +22,10 @@
     <ProjectReference Include="..\Shared\Schiavello.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="data.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
 </Project>
