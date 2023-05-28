@@ -1,0 +1,52 @@
+﻿@inherits LayoutComponentBase
+
+<MudThemeProvider/>
+<MudDialogProvider/>
+<MudSnackbarProvider/>
+
+<div class="page">
+
+    <main>
+
+      <header class="header js-header" role="banner" data-stickify-me="true">
+
+            <div class="header-main-wrapper">
+                <div class="page-wrapper">
+                    <div class="header-main js-header-main">
+                        <button class="header__nav-toggler js-header__nav-toggler"><span class="visuallyhidden">nav toggler</span></button>
+                        <a href="https://www.schiavello.com/property" class="header__logo">
+                            <img class="header__logo-img" src="https://www.schiavello.com/__data/assets/image/0016/592/schiavello-logo.png" alt="schiavello logo">
+                        </a>
+                        <div class="header-nav-wrapper js-header-nav-wrapper">
+                
+                            <ul class="header__nav">
+
+                                <li class="header__nav-item ">
+                                    <div class="header__nav-link-wrapper">
+                                        <a href="" class="header__nav-link">Counter</a>
+                                    </div>
+                                </li>
+                                <li class="header__nav-item ">
+                                    <div class="header__nav-link-wrapper">
+                                        <a href="todolist" class="header__nav-link">Todo List</a>
+                                    </div>
+                                </li>
+                                <li class="header__nav-item ">
+                                    <div class="header__nav-link-wrapper">
+                                        <a href="image-library" class="header__nav-link">Image Library</a>
+                                    </div>
+                                </li>
+
+                            </ul>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>

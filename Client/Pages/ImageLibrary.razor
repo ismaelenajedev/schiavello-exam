@@ -1,0 +1,333 @@
+@page "/image-library"
+@using Severity = MudBlazor.Severity;
+@using Schiavello.Shared;
+@using FluentValidation;
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+ <MudGrid>
+    <MudItem xs="5" sm="5" md="5">
+
+        <MudCard Outlined="true" Class="mb-5">
+            <MudForm Model="@FileResource" @ref="@form" Validation="@(ValidationRules.ValidateValue)" ValidationDelay="0">
+                <MudCardContent>
+
+                    <MudFileUpload Class="mb-2" Disabled="@(FileResource.UploadResult.Success)" T="IBrowserFile" For="@(() => FileResource.File)" @bind-Files="FileResource.File" OnFilesChanged="UploadFiles" SuppressOnChangeWhenInvalid="SuppressOnChangeWhenInvalid">
+                        <ButtonTemplate>
+                            <MudButton HtmlTag="label"
+                                    Variant="Variant.Filled"
+                                    Color="Color.Secondary"
+                                    StartIcon="@Icons.Material.Filled.CloudUpload"
+                                    for="@context">
+                                Upload Files
+                            </MudButton>
+                        </ButtonTemplate>
+                        <SelectedTemplate>
+
+                            @if (context != null)
+                            {
+                                if (FileResource.UploadResult != null)
+                                {
+                                    if (FileResource.UploadResult.Success)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Color="Color.Success">File Upload Complete.</MudText>
+                                    }
+                                    else if (UploadingState)
+                                    {
+                                        <MudText Typo="Typo.subtitle2" Color="Color.Warning">Uploading .. Please wait ..</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.subtitle2">@FileResource.UploadResult.Failures</MudText>
+                                    }
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.subtitle2">@context.Name</MudText>
+                                }
+                            }
+                            else
+                            {
+                                <MudText>No File</MudText>
+                            }
+                            
+                        </SelectedTemplate>
+                    </MudFileUpload>
+
+                    <MudTextField Class="mb-2" @bind-Value="FileResource.Title"
+                                For="@(() => FileResource.Title)"
+                                Immediate="true"
+                                Label="Title" 
+                                Variant="Variant.Outlined" Margin="Margin.Dense" 
+                                />
+
+                    <MudTextField Class="mb-2" @bind-Value="FileResource.Category"
+                                For="@(() => FileResource.Category)"
+                                Immediate="true"
+                                Label="Category" 
+                                Variant="Variant.Outlined" Margin="Margin.Dense"
+                                />
+
+                    <MudTextField Class="mb-2" @bind-Value="FileResource.Description"
+                                For="@(() => FileResource.Description)"
+                                Immediate="true"
+                                Label="Description" 
+                                Variant="Variant.Outlined" Margin="Margin.Dense"
+                                />
+
+                    <MudText Class="ml-5">@(string.IsNullOrEmpty(FileResource.Id) ? "" : $"You are currently updating Photo: { FileResource.Title }")</MudText>
+
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Class="ml-2" Disabled="@(!FileResource.UploadResult.Success)" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(async () => await Submit())">Save Photo</MudButton>
+                </MudCardActions>
+
+            </MudForm>
+        </MudCard>
+
+    </MudItem>
+    <MudItem xs="7" sm="7" md="7">
+        
+        <MudTable Hover="true" Breakpoint="Breakpoint.Sm" Height="300px" 
+            Items="@Photos" Filter="new Func<PhotoItem, bool>(FilterFunc)"
+            GroupBy="@GroupDefinition">
+
+            <ToolBarContent>
+                <MudTextField @bind-Value="SearchText" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+
+            <ColGroup>
+                <col />
+                <col />
+                <col />
+                <col />
+                <col />
+            </ColGroup>
+            <HeaderContent>
+                <MudTh></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<PhotoItem, object>(x=>x.Title)">Title</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<PhotoItem, object>(x=>x.Category)">Category</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<PhotoItem, object>(x=>x.Description)">Description</MudTableSortLabel></MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <GroupHeaderTemplate>
+                <MudTh Class="mud-table-cell-custom-group" colspan="5">@($"{context.GroupName}: {context.Key} [{ context.Items.Count() }]")</MudTh>
+            </GroupHeaderTemplate>
+            <RowTemplate>
+                <MudTd DataLabel="Url">
+                    <MudImage Src="@context.Url" 
+                        Width="80" Height="80" Alt="" Elevation="25" Class="rounded-lg ma-4"/>
+                </MudTd>
+                <MudTd DataLabel="Title">@context.Title</MudTd>
+                <MudTd DataLabel="Category">@context.Category</MudTd>
+                <MudTd DataLabel="Description">@context.Description</MudTd>
+                <MudTd>
+                    <MudButton Variant="Variant.Text"
+                            EndIcon="@Icons.Material.Filled.Edit"
+                            Color="Color.Warning"
+                            OnClick="() => EditPhoto(context)"
+                            Style="text-transform:none">
+                        Edit
+                    </MudButton>
+                    <MudButton Variant="Variant.Text"
+                            EndIcon="@Icons.Material.Filled.Delete"
+                            Color="Color.Secondary"
+                            OnClick="() => DeletePhoto(context.Id)"
+                            Style="text-transform:none">
+                        Delete
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+    </MudItem>
+ </MudGrid>
+
+@code
+{
+    private List<PhotoItem>? Photos = new();
+    private string SearchText = string.Empty;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await GetPhotos();
+    }
+
+    private MudForm form;
+    private FileModel FileResource = new();
+    private FileModelFluentValidator ValidationRules = new();
+    private bool SuppressOnChangeWhenInvalid = true;
+    private bool UploadingState = false;
+
+    private async Task UploadFiles(InputFileChangeEventArgs e)
+    {
+        Snackbar.Configuration.PositionClass = Defaults.Classes.Position.TopCenter;
+
+        var content = new MultipartFormDataContent();
+
+        content.Add(new StreamContent(e.File.OpenReadStream()), "file", e.File.Name);
+
+        UploadingState = true;
+
+        try
+        {
+            using var response = await Http.PostAsync("api/photo/upload-photo", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                FileResource.UploadResult = await response.Content.ReadFromJsonAsync<PhotoUploadResult>();
+
+                if (FileResource.UploadResult == null)
+                {
+                    Snackbar.Add($"An error has occurred.", Severity.Error);
+                    return;
+                }
+
+                if (FileResource.UploadResult.Success)
+                    Snackbar.Add($"File Upload Complete.", Severity.Success);
+                else
+                    Snackbar.Add($"Failure!, { FileResource.UploadResult.Failures }", Severity.Error);
+            }
+        }
+        finally
+        {
+            UploadingState = false;
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.Validate();
+
+        if (form.IsValid)
+        {
+            var request = new SavePhotoRequest();
+
+            request.Id = FileResource.Id;
+            request.Category = FileResource.Category;
+            request.Title = FileResource.Title;
+            request.Description = FileResource.Description;
+            request.Url = FileResource.UploadResult.Url;
+
+            await Http.PostAsJsonAsync("api/photo/save-photo", request);
+
+            Snackbar.Add("Success! Record Saved.", Severity.Success);
+
+            await GetPhotos();
+
+            await ClearFields();
+        }
+    }
+
+    private async Task GetPhotos()
+    {
+        Photos = await Http.GetFromJsonAsync<List<PhotoItem>>("api/photo/get-all");
+    }
+
+    private async Task ClearFields()
+    {
+        FileResource.Id = string.Empty;
+        FileResource.Category = string.Empty;
+        FileResource.Description = string.Empty;
+        FileResource.Title = string.Empty;
+
+        FileResource.UploadResult = new();
+
+        StateHasChanged();
+
+        await Task.CompletedTask;
+    }
+
+    private async Task EditPhoto(PhotoItem photo)
+    {
+        FileResource.Id = photo.Id;
+        FileResource.Category = photo.Category;
+        FileResource.Description = photo.Description;
+        FileResource.Title = photo.Title;
+
+        FileResource.UploadResult.Success = true;
+        FileResource.UploadResult.Url = string.Empty;
+
+        StateHasChanged();
+
+        await Task.CompletedTask;
+    }
+
+    private async Task DeletePhoto(string id)
+    {
+        await Http.DeleteAsync($"api/photo/delete-photo/{id}");
+
+        await GetPhotos();
+    }
+
+    private TableGroupDefinition<PhotoItem> GroupDefinition = new()
+    {
+        GroupName = "Category",
+        Indentation = false,
+        Expandable = false,
+        Selector = (e) => e.Category
+    };
+
+    private bool FilterFunc(PhotoItem photo)
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+            return true;
+        if (photo.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (photo.Category.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (photo.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if ($"{photo.Title} {photo.Category} {photo.Description}".Contains(SearchText))
+            return true;
+
+        return false;
+    }
+
+    public class FileModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Category { get; set; }
+        public string Title { get; set; }
+        public string Description { get; set; }
+        public IBrowserFile File { get; set; }
+        public PhotoUploadResult? UploadResult { get; set; } = new();
+    }
+
+    public class FileModelFluentValidator : AbstractValidator<FileModel>
+    {
+        public FileModelFluentValidator()
+        {
+            RuleFor(x => x.Title)
+                .NotEmpty()
+                .Length(1, 100);
+
+            RuleFor(x => x.Category)
+                .NotEmpty()
+                .Length(1, 100);
+
+            RuleFor(x => x.Description)
+                .NotEmpty()
+                .Length(1, 100);
+
+            RuleFor(x => x.File).NotEmpty().When(x => string.IsNullOrEmpty(x.Id));
+
+            When(x => x.File != null, () =>
+            {
+                RuleFor(x => x.File.Size).LessThanOrEqualTo(10485760).WithMessage("The maximum file size is 10 MB");
+            });
+
+            RuleFor(x => x.UploadResult).NotNull();
+        }
+
+        public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>
+        {
+            var result = await ValidateAsync(ValidationContext<FileModel>.CreateWithOptions((FileModel)model, x => x.IncludeProperties(propertyName)));
+            if (result.IsValid)
+                return Array.Empty<string>();
+
+            return result.Errors.Select(e => e.ErrorMessage);
+        };
+    }
+
+}

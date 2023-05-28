@@ -1,0 +1,172 @@
+@page "/todolist"
+@using Schiavello.Shared
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+<MudCard Outlined="true" Class="mb-5" >
+    <MudCardContent>
+    
+        <MudGrid>
+            <MudItem xs="3" sm="3" md="3">
+                <MudTextField @bind-Value="TodoResource.TaskName" Label="Task" Variant="Variant.Outlined" Margin="Margin.Dense"></MudTextField>
+            </MudItem>
+            <MudItem xs="3" sm="3" md="3">
+                <MudSelect Disabled="@(TodoResource.Id.Equals(0))" @bind-Value="TodoResource.Status" Margin="Margin.Dense" T="string" Label="Status" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@(Statuses.Default)" />
+                    <MudSelectItem Value="@(Statuses.New)" />
+                    <MudSelectItem Value="@(Statuses.Active)" />
+                    <MudSelectItem Value="@(Statuses.Completed)" />
+                </MudSelect>   
+            </MudItem>
+            <MudItem xs="6" sm="6" md="6">
+                <MudButton OnClick="() => SaveTask()" Variant="Variant.Filled" Color="Color.Primary">Save Task</MudButton>
+                <MudButton OnClick="() => NewTask()" Variant="Variant.Filled" Color="Color.Default">Clear</MudButton>
+            </MudItem>
+        </MudGrid>
+
+    </MudCardContent>
+    <MudCardActions>
+        <MudText Class="ml-5">@(TodoResource.Id.Equals(0) ? "" : $"You are currently updating Task: { TodoResource.Id }")</MudText>
+    </MudCardActions>
+</MudCard>
+
+<MudTable Hover="true" Breakpoint="Breakpoint.Sm" Height="300px" 
+          Items="@Todos" Filter="new Func<TodoItem,bool>(FilterFunc)"
+          GroupBy="@GroupDefinition">
+
+    <ToolBarContent>
+        <MudTextField @bind-Value="SearchText" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+
+    <ColGroup>
+        <col />
+        <col />
+        <col />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<TodoItem, object>(x=>x.Id)">Id</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TodoItem, object>(x=>x.TaskName)">Task</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<TodoItem, object>(x=>x.Status)">Status</MudTableSortLabel></MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <GroupHeaderTemplate>
+        <MudTh Class="mud-table-cell-custom-group" colspan="5">@($"{context.GroupName}: {context.Key} [{ context.Items.Count() }]")</MudTh>
+    </GroupHeaderTemplate>
+    <RowTemplate>
+        <MudTd DataLabel="Id">@context.Id</MudTd>
+        <MudTd DataLabel="Task">@context.TaskName</MudTd>
+        <MudTd DataLabel="Status">@context.Status</MudTd>
+        <MudTd>
+            <MudButton Variant="Variant.Text"
+                    EndIcon="@Icons.Material.Filled.Edit"
+                    Color="Color.Warning"
+                    OnClick="() => EditTask(context)"
+                    Style="text-transform:none">
+                Edit
+            </MudButton>
+            <MudButton Variant="Variant.Text"
+                    EndIcon="@Icons.Material.Filled.Delete"
+                    Color="Color.Secondary"
+                    OnClick="() => DeleteTask(context.Id)"
+                    Style="text-transform:none">
+                Delete
+            </MudButton>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+
+    private TodoModel TodoResource = new();
+    private List<TodoItem>? Todos = new();
+    private string SearchText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetTasks();
+    }
+
+    private async Task NewTask()
+    {
+        TodoResource.Id = 0;
+        TodoResource.TaskName = string.Empty;
+        TodoResource.Status = string.Empty;
+
+        StateHasChanged();
+
+        await Task.CompletedTask;
+    }
+
+    private async Task GetTasks()
+    {
+        Todos = await Http.GetFromJsonAsync<List<TodoItem>>("api/todo/get-all");
+    }
+
+    private async Task SaveTask()
+    {
+        if (string.IsNullOrEmpty(TodoResource.TaskName))
+        {
+            Snackbar.Add("Task name is required.", Severity.Warning);
+            return;
+        }
+        
+        var request = new SaveTodoRequest();
+
+        request.Id = TodoResource.Id;
+        request.Status = TodoResource.Status;
+        request.TaskName = TodoResource.TaskName;
+
+        await Http.PostAsJsonAsync("api/todo/save-todo", request);
+
+        Snackbar.Add("Success! Record Saved.", Severity.Success);
+
+        await GetTasks();
+
+        await NewTask();
+    }
+
+    private async Task EditTask(TodoItem todo)
+    {
+        TodoResource.Id = todo.Id;
+        TodoResource.TaskName = todo.TaskName;
+        TodoResource.Status = todo.Status;
+
+        StateHasChanged();
+        
+        await Task.CompletedTask;
+    }
+
+    private async Task DeleteTask(int id)
+    {
+        await Http.DeleteAsync($"api/todo/delete-todo/{id}");
+
+        await GetTasks();
+    }
+
+    private TableGroupDefinition<TodoItem> GroupDefinition = new()
+    {
+        GroupName = "Status",
+        Indentation = false,
+        Expandable = true,
+        Selector = (e) => e.Status
+    };
+
+    private bool FilterFunc(TodoItem todo)
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+            return true;
+         if (todo.Status.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    private record TodoModel
+    {
+        public int Id { get; set; } = 0;
+        public string TaskName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+
+}
